@@ -127,6 +127,11 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiV = [0.]
       ret.lateralTuning.pid.kf = 1.  # get_steer_feedforward_volt()
       ret.steerActuatorDelay = 0.2
+      
+      ret.longitudinalTuning.kpBP = [5., 15., 35.]
+      ret.longitudinalTuning.kpV = [0.8, .9, 0.8]
+      ret.longitudinalTuning.kiBP = [5., 15., 35.]
+      ret.longitudinalTuning.kiV = [0.08, 0.13, 0.13]
 
     elif candidate == CAR.MALIBU:
       ret.mass = 1496. + STD_CARGO_KG
