@@ -45,15 +45,6 @@ class LatControlTorque(LatControl):
     self.torque_from_lateral_accel = CI.torque_from_lateral_accel()
     self.use_steering_angle = self.torque_params.useSteeringAngle
     self.steering_angle_deadzone_deg = self.torque_params.steeringAngleDeadzoneDeg
-    self.use_nn = CI.initialize_ff_nn(CP.carFingerprint)
-    if self.use_nn:
-      self.torque_from_nn = CI.get_ff_nn
-    self.friction_look_ahead_v = [1.0, 2.0]
-    self.friction_look_ahead_bp = [9.0, 35.0]
-    self.error_scale_lat_accel = 0.0
-    self.error_scale_lat_accel_decay_factor = 0.99
-    self.error_scale_lat_accel_counter = 0
-    self.error_scale_lat_accel_decay_delay = 50 # wait 50 frames (1s) before beginning to scale error back up for better centering
 
     self.param_s = Params()
     self.custom_torque = self.param_s.get_bool("CustomTorqueLateral")
@@ -91,24 +82,11 @@ class LatControlTorque(LatControl):
         actual_curvature_llk = llk.angularVelocityCalibrated.value[2] / CS.vEgo
         actual_curvature = interp(CS.vEgo, [2.0, 5.0], [actual_curvature_vm, actual_curvature_llk])
         curvature_deadzone = 0.0
-      if lat_plan is not None:
-        lookahead = interp(CS.vEgo, self.friction_look_ahead_bp, self.friction_look_ahead_v)
-        friction_upper_idx = next((i for i, val in enumerate(T_IDXS) if val > lookahead), 16)
-        lookahead_curvature_rate = get_lookahead_value(list(lat_plan.curvatureRates)[LAT_PLAN_MIN_IDX:friction_upper_idx], desired_curvature_rate)
-        desired_lateral_jerk = lookahead_curvature_rate * CS.vEgo ** 2
-      else:
-        desired_lateral_jerk = desired_curvature_rate * CS.vEgo ** 2
+      desired_lateral_jerk = desired_curvature_rate * CS.vEgo ** 2
       desired_lateral_accel = desired_curvature * CS.vEgo ** 2
       
       
       max_future_lateral_accel = max([i * CS.vEgo**2 for i in list(lat_plan.curvatures)[LAT_PLAN_MIN_IDX:16]] + [desired_lateral_accel], key=lambda x: abs(x))
-      if abs(max_future_lateral_accel) > abs(self.error_scale_lat_accel):
-        self.error_scale_lat_accel = max_future_lateral_accel
-        self.error_scale_lat_accel_counter = 0
-      else:
-        self.error_scale_lat_accel_counter += 1
-        if self.error_scale_lat_accel_counter > self.error_scale_lat_accel_decay_delay:
-          self.error_scale_lat_accel *= self.error_scale_lat_accel_decay_factor
 
       # desired rate is the desired rate of change in the setpoint, not the absolute desired curvature
       # desired_lateral_jerk = desired_curvature_rate * CS.vEgo ** 2
@@ -120,15 +98,14 @@ class LatControlTorque(LatControl):
       measurement = actual_lateral_accel + low_speed_factor * actual_curvature
       error = setpoint - measurement
       error_scale_factor = 3.0
-      error_scale_factor = 1.0 / (1.0 + min(apply_deadzone(abs(self.error_scale_lat_accel), 0.4) * error_scale_factor, error_scale_factor - 1))
+      error_scale_factor = 1.0 / (1.0 + min(apply_deadzone(abs(max_future_lateral_accel), 0.4) * error_scale_factor, error_scale_factor - 1))
       error *= error_scale_factor
       gravity_adjusted_lateral_accel = desired_lateral_accel - params.roll * ACCELERATION_DUE_TO_GRAVITY
       pid_log.error = self.torque_from_lateral_accel(error, self.torque_params, error,
                                                      lateral_accel_deadzone, friction_compensation=False)
       ff = self.torque_from_lateral_accel(gravity_adjusted_lateral_accel, self.torque_params,
                                           desired_lateral_accel - actual_lateral_accel,
-                                          lateral_accel_deadzone, friction_compensation=True) if not self.use_nn \
-          else self.torque_from_nn(CS.vEgo, desired_lateral_accel, desired_lateral_jerk, params.roll)
+                                          lateral_accel_deadzone, friction_compensation=True)
 
       freeze_integrator = steer_limited or CS.steeringPressed or CS.vEgo < 5
       output_torque = self.pid.update(pid_log.error,
