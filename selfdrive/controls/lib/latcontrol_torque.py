@@ -66,8 +66,8 @@ class LatControlTorque(LatControl):
       self.nnff_lat_jerk_filtered = FirstOrderFilter(0.0, 0.0, 0.01)
       history_check_frames = [30] # 0.3 seconds ago
       self.history_frame_offsets = [history_check_frames[0] - i for i in history_check_frames]
-      self.lat_accel_deque = deque(maxlen=history_check_frames)
-      self.roll_deque = deque(maxlen=history_check_frames)
+      self.lat_accel_deque = deque(maxlen=history_check_frames[0])
+      self.roll_deque = deque(maxlen=history_check_frames[0])
       self.nnff_alpha_up_down = [0.2, 0.05] # for increasing/decreasing magnitude of lat accel/jerk
       self.nnff_linear_ff_factor_bp = [6.0, 12.0] # m/s; linear ff at/below the low speed
       self.nnff_linear_ff_factor_v = [0.0, 0.0]
